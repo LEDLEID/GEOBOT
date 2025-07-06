@@ -94,7 +94,7 @@ async def on_message(message):
             t1 = parse_time(r1['timestamp'])
             for r2 in data2:
                 t2 = parse_time(r2['timestamp'])
-                if abs(t1 - t2) <= TIME_WINDOW:
+                if t1.astimezone(timezone.utc).date() == t2.astimezone(timezone.utc).date():
                     win, draw, lose = 0, 0, 0
                     for n1, n2 in zip(r1['numbers'], r2['numbers']):
                         if n1 > n2:
@@ -110,7 +110,7 @@ async def on_message(message):
                     matched_times.append((r1['timestamp'], r2['timestamp']))
 
         if match_count == 0:
-            await message.channel.send("⚠️ 比較できる同時刻（±6時間）の記録が見つかりませんでした。")
+            await message.channel.send("⚠️ 比較できる同日（UTC）の記録が見つかりませんでした。")
         else:
             result_msg = f"🔍 `{user1}` vs `{user2}` の合計結果: **{total_win}-{total_draw}-{total_lose}**"
             result_msg += f"\n🔁 比較回数: {match_count} 回"
@@ -127,5 +127,28 @@ async def on_message(message):
             await message.channel.send("📭 削除できる記録が見つかりませんでした。")
         return
 
+
+    # ---------- !Average コマンド ----------
+    elif content.lower() == '!average':
+        user_records = results_by_username.get(username)
+        if not user_records:
+            await message.channel.send("📭 あなたの記録が見つかりませんでした。")
+            return
+
+        total = [0, 0, 0]
+        count = len(user_records)
+
+        for rec in user_records:
+            for i in range(3):
+                total[i] += rec['numbers'][i]
+
+        avg = [round(total[i] / count, 1) for i in range(3)]
+        overall_avg = round(sum(avg) / 3, 1)
+
+        await message.channel.send(
+            f"📊 {username} の平均スコア: `{avg[0]} - {avg[1]} - {avg[2]}`\n"
+            f"🎯 3つの項目の全体平均: `{overall_avg}`"
+        )
+        return
 
 client.run(TOKEN)
