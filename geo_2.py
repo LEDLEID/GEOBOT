@@ -40,24 +40,43 @@ async def on_message(message):
     username = message.author.name
     content = message.content.strip()
 
-    # ---------- データ登録 ----------
-    match = re.match(r'^!Result:(\d+)-(\d+)-(\d+)$', content)
-    if match:
-        numbers = list(map(int, match.groups()))
-        timestamp = datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
+    # ---------- データ登録（!Result:xxx-xxx-xxx[,timestamp]） ----------
+    if content.startswith('!Result:'):
+        try:
+            body = content[len('!Result:'):]
+            if ',' in body:
+                score_part, timestamp_part = body.split(',', 1)
+                timestamp = timestamp_part.strip()
+                
+                # 期待形式: YYYY-MM-DDTHH:MM:SS
+                datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%S')  # バリデーション用
+                # 保存時は JST を仮定した文字列のまま扱う（UTC変換などは不要）
+            else:
+                score_part = body
+                timestamp = datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
 
-        record = {
-            "numbers": numbers,
-            "timestamp": timestamp
-        }
+            match = re.match(r'^(\d+)-(\d+)-(\d+)$', score_part.strip())
+            if not match:
+                await message.channel.send("❌ 入力形式が不正です。例: `!Result:1000-1000-1000[,2025-07-01T23:40:50]`")
+                return
 
-        if username not in results_by_username:
-            results_by_username[username] = []
+            numbers = list(map(int, match.groups()))
 
-        results_by_username[username].append(record)
-        save_results(results_by_username)
+            record = {
+                "numbers": numbers,
+                "timestamp": timestamp.replace('T', ' ')  # 保存時は JST でスペース区切りに変換
+            }
 
-        await message.channel.send(f"✅ {username} さんの記録を追加しました: {numbers}（{timestamp}）")
+            if username not in results_by_username:
+                results_by_username[username] = []
+
+            results_by_username[username].append(record)
+            save_results(results_by_username)
+
+            await message.channel.send(f"✅ {username} さんの記録を登録しました: {numbers}（{record['timestamp']}）")
+
+        except Exception as e:
+            await message.channel.send(f"⚠️ エラーが発生しました: {e}")
         return
 
     # ---------- !list コマンド ----------
