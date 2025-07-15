@@ -2,7 +2,13 @@ import discord
 import re
 import json
 import os
+import matplotlib.pyplot as plt
+import io
+import matplotlib.font_manager as fm
 from datetime import datetime, timezone, timedelta
+
+jp_font = fm.FontProperties(fname="C:\\Windows\\Fonts\\msgothic.ttc")
+plt.rcParams["font.family"] = jp_font.get_name()
 
 with open('TOKEN.txt', 'r') as f:
     TOKEN = f.read().strip()
@@ -169,5 +175,67 @@ async def on_message(message):
             f"🎯 3つの項目の全体平均: `{overall_avg}`"
         )
         return
+
+    # ---------- !Graph コマンド ----------
+    elif content.lower() == '!graph':
+        user_records = results_by_username.get(username)
+        if not user_records:
+            await message.channel.send("📭 あなたの記録が見つかりませんでした。")
+            return
+
+        # 全スコアを1つのリストにまとめる
+        all_scores = []
+        for rec in user_records:
+            all_scores.extend(rec['numbers'])
+
+        if not all_scores:
+            await message.channel.send("📉 ヒストグラムを描くデータがありません。")
+            return
+
+        # 階級（bin）を500刻みに設定
+        min_score = min(all_scores)
+        max_score = max(all_scores)
+        bin_start = (min_score // 500) * 500
+        bin_end = ((max_score // 500) + 1) * 500 + 1
+        bins = list(range(bin_start, bin_end, 500))
+
+        # 平均スコアを計算
+        avg_score = sum(all_scores) / len(all_scores)
+
+        # ヒストグラム描画
+        plt.figure(figsize=(8, 5))
+        counts, bins_out, patches = plt.hist(all_scores, bins=bins, edgecolor='black', color='skyblue')
+
+        # 平均スコア線（赤い破線）
+        plt.axvline(avg_score, color='red', linestyle='dashed', linewidth=2, label=f'平均: {avg_score:.1f}')
+
+        # 各棒グラフの上に数値を表示
+        for count, patch in zip(counts, patches):
+            if count > 0:
+                x = patch.get_x() + patch.get_width() / 2
+                y = patch.get_height()
+                plt.text(x, y, f'{int(count)}', ha='center', va='bottom', fontsize=10)
+
+        # グラフ装飾
+        plt.title(f"{username} のスコアヒストグラム")
+        plt.xlabel("スコア")
+        plt.ylabel("出現回数")
+        plt.grid(axis='y')
+        plt.legend()
+
+        # 画像をバッファに保存
+        buf = io.BytesIO()
+        plt.tight_layout()
+        plt.savefig(buf, format='png')
+        buf.seek(0)
+        plt.close()
+
+        # Discordに画像送信
+        await message.channel.send(file=discord.File(fp=buf, filename='histogram.png'))
+        return
+
+
+
+
 
 client.run(TOKEN)
